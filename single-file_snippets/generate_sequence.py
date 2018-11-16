@@ -4,9 +4,12 @@ import os
 import datetime
 import re
 
-INFILE = 'Scs_test3.json'
+TEST = '4-4'
+INFILE = 'Scs' + TEST + '.json'
 LOGFILE = 'python_script.log'
 OUTDIR = 'p_out'
+PL_FILE = 'clips-list.txt'
+V_OUT_FILE = 'clips' + TEST + '.mp4'
 
 
 ##	Log
@@ -82,12 +85,15 @@ def process_file(f_in, extension):
             'rep': clips[0]['rep'],
         }
         part_count = 0
+        pl = ''
         for elem in clips:
             if elem['id'] != clip['id'] or elem['rep'] != clip['rep']:
                 #flush previous clip
                 clip['duration'] = elem['t_elapsed'] - clip['start_abs']
-                str_to_run = 'ffmpeg -i ' + clip['filename'] + ' -ss ' + str(clip['start_vfile']) + ' -t ' + str(
-                    clip['duration']) + ' ' + str(part_count) + '.mp4'
+                str_to_run = 'ffmpeg.exe -i ' + clip[
+                    'filename'] + ' -r 30 -preset slow -vf scale=-1:720 -c:v libx264 -b:v 10000k -c:a copy -ss ' + str(
+                        clip['start_vfile']) + ' -t ' + str(clip['duration']) + ' ' + OUTDIR + '/' + str(part_count) + '.mp4'
+                pl += 'file ' + str(part_count) + '.mp4 \n'
                 log(str_to_run, 0)
                 #os.system('ffmpeg -i '+clip['filaname']+' -ss '+00:09+'' -t 5 guide-out-1.mp4')
                 #start new clip
@@ -97,6 +103,12 @@ def process_file(f_in, extension):
                 clip['duration'] = 0
                 clip['id'] = elem['id']
                 clip['rep'] = elem['rep']
+                part_count += 1
+                os.system(str_to_run)
+        with open(OUTDIR + '/' + PL_FILE, 'a') as plfile:
+            plfile.write(pl)
+        os.system('ffmpeg.exe -f concat -i ' + OUTDIR + '/' + PL_FILE + ' -c copy ' + OUTDIR + '/' + V_OUT_FILE)
+        #merge here
 
 
 def main():
