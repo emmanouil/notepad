@@ -4,12 +4,13 @@ import os
 import datetime
 import re
 
-TEST = '4-4'
+TEST = '6-1'
 INFILE = 'Scs' + TEST + '.json'
 LOGFILE = 'python_script.log'
 OUTDIR = 'p_out'
 PL_FILE = 'clips-list.txt'
 V_OUT_FILE = 'clips' + TEST + '.mp4'
+S_OUT_FILE = 'score' + TEST + '.csv'
 
 
 ##	Log
@@ -71,18 +72,28 @@ def process_file(f_in, extension):
     with open(f_in + extension, 'r') as file_in:
         data = json.load(file_in)
         clips = []
+        score_csv = 'Time (t_video), Stream ID, Rep, Score \n'  #used for score logging
         for elem in data:
+            #first log scores
+            try:
+                score_csv += str(elem['t_elapsed']) + ', ' + elem['id'] + ', ' + str(elem['rep']) + ', ' + str(elem['Score']) + '\n'
+            except KeyError:
+                log('Skipped element in logging scores', 1)
+            #then parse clips for building video sequence
             if len(clips) is 0:
                 clips.append(elem)
             elif clips[len(clips) - 1]['index'] != elem['index'] or clips[len(clips) - 1]['rep'] != elem['rep']:
                 clips.append(elem)
+        #flush scores
+        with open(OUTDIR + '/' + S_OUT_FILE, 'a') as sfile:
+            sfile.write(score_csv)
         clip = {
             'start_vfile': clips[0]['t_abs'] - clips[0]['t_elapsed'],
             'start_abs': 0,
             'filename': construct_filename(clips[0]['id'], clips[0]['rep']),
             'duration': 0,
             'id': clips[0]['id'],
-            'rep': clips[0]['rep'],
+            'rep': clips[0]['rep']
         }
         part_count = 0
         pl = ''
