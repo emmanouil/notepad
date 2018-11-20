@@ -4,13 +4,14 @@ import os
 import datetime
 import re
 
-TEST = '6-1'
+TEST = '4-8'
 INFILE = 'Scs' + TEST + '.json'
 LOGFILE = 'python_script.log'
 OUTDIR = 'p_out'
 PL_FILE = 'clips-list.txt'
 V_OUT_FILE = 'clips' + TEST + '.mp4'
 S_OUT_FILE = 'score' + TEST + '.csv'
+MIN_LENGTH_S = 77
 
 
 ##	Log
@@ -84,6 +85,9 @@ def process_file(f_in, extension):
                 clips.append(elem)
             elif clips[len(clips) - 1]['index'] != elem['index'] or clips[len(clips) - 1]['rep'] != elem['rep']:
                 clips.append(elem)
+            #exit the iteration when we havethe desired duration
+            if(elem['t_elapsed'] > MIN_LENGTH_S):
+                break
         #flush scores
         with open(OUTDIR + '/' + S_OUT_FILE, 'a') as sfile:
             sfile.write(score_csv)
