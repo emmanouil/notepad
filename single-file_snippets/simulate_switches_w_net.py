@@ -372,6 +372,17 @@ def recreate_scs():
                         print('TODO fetch LoQ seg')
                 else:
                     print('do not nothing, time left in buffer: %f', b_t_remaining)
+        scene_logs.append({
+            'id': curr_stream_id,
+            'index': curr_stream_index,
+            'rep': curr_rep,
+            't_abs': 'TODO',
+            't_elapsed': t,
+            'is_buffering': isBuffering,
+            'is_buffer_full': isBufferFull,
+            'Score': find_score_for_id(curr_scores, curr_stream_id)
+        })
+
 
 # TODO issue request
 
