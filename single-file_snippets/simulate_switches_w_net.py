@@ -140,6 +140,12 @@ def find_scores_at_time(t_in):
     return curr_scores
 
 
+def find_score_for_id(scores_in, id_in):
+    for score in scores_in:
+        if score["id"] == id_in:
+            return score["S"]
+
+
 #sorts list according to score
 def clean_and_sort_scores(scores_in):
     scores_in = sorted(scores_in, cmp=None, key=lambda k: k['S'], reverse=True)
@@ -220,8 +226,7 @@ class Buffer:
         for s in self.segs:
             if (s.t_start <= t_now <= s.t_start + s.duration):
                 return s
-        return 
-
+        return
 
 
 def is_stream_available(index_in, rep_in, t_in):
@@ -243,15 +248,52 @@ request = {
     'representation': 0,
     'segment_t': 0
 }
+scene_logs = []
+
 
 def new_request(index, rep, starttime):
+    global request
     request['status'] = 'PENDING'
     request['index'] = index
     request['representation'] = rep
     request['segment_t'] = starttime
-    
 
 
+def switch_stream(t_in, rep):
+    global curr_stream_id
+    global curr_stream_index
+    global prev_stream_id
+
+    curr_scores = find_scores_at_time(t_in)
+    curr_scores = clean_and_sort_scores(curr_scores)
+
+    tmp_index = 0
+    for i in range(0, len(curr_scores)):
+        if curr_scores[i]['id'] == curr_stream_id or curr_scores[i]['id'] == prev_stream_id:
+            continue
+        else:
+            tmp_index = i
+            break
+
+    if (curr_scores[tmp_index]['S'] > 0.75):
+        next_switch_t = t_in + 12
+        print('next stream switch at ', next_switch_t, 'with score ', curr_scores[tmp_index]['S'])
+    elif (curr_scores[tmp_index]['S'] > 0.60):
+        next_switch_t = t_in + 8
+        print('next stream switch at ', next_switch_t, 'with score ', curr_scores[tmp_index]['S'])
+    else:
+        next_switch_t = t_in + 4
+        print('next stream switch at ', next_switch_t, 'with score ', curr_scores[tmp_index]['S'])
+    #do the req
+    new_request(curr_scores[tmp_index]['index'], rep, t_in)
+    print('requested to switch Stream to ', curr_scores[tmp_index]['id'])
+    return next_switch_t
+
+
+curr_stream_id = ""
+curr_stream_index = -1
+prev_stream_id = ""
+next_stream_id = ""
 
 def recreate_scs():
 
@@ -273,17 +315,21 @@ def recreate_scs():
     #time of buffered video remaining
     b_t_remaining = 2.0
     #rest of vars
+    global curr_stream_id
     curr_stream_id = "A002C001_140325E3"
+    global curr_stream_index
     curr_stream_index = 0
+    global prev_stream_id
     prev_stream_id = "A002C001_140325E3"
+    global next_stream_id
     next_stream_id = "A002C001_140325E3"
     last_Qswitch_t = 0.0
     last_Sswitch_t = 0.0
+    last_fetched_segment_end_t = 2.0
 
     #emulate timeline
     for t_ms in range(0, 200000, NETWORK_INTERVAL_MS):
         global request
-
 
         #update time
         t = t_ms / float(1000)
@@ -294,6 +340,8 @@ def recreate_scs():
                 s_in = Segment(request['segment_t'], seg_duration, request['index'], request['representation'])
                 b.push_segment(s_in)
                 request['status'] = 'EXECUTED'
+                last_fetched_segment_start_t = request['segment_t']
+                curr_rep = request['representation']
             else:
                 request['status'] = 'FAILED'
                 print('failed request')
@@ -311,30 +359,18 @@ def recreate_scs():
 
         #check if we had a switch in Q or S
         tmp_s = b.peek_segment_at_time(t)
-        if tmp_s.index != curr_stream_index:
-            curr_stream_index = tmp_s.index
-            prev_stream_id = curr_stream_id
-            curr_stream_id = FILE_LIST[tmp_s.index]
-            curr_rep = tmp_s.representation
-            last_Sswitch_t = t
-        if tmp_s.representation != curr_rep:
-            curr_rep = tmp_s.representation
-            last_Qswitch_t = t
-
-
-
-        if (next_switch_t_s - t == (NETWORK_INTERVAL_MS / float(1000))):
-            print('we will request to change stream. current stream status: ', request['status'])
-            starttime = next_switch_t_s
-            if (curr_scores[0]['S'] > 0.75):
-                next_switch_t_s += 12
-            elif (curr_scores[0]['S'] > 0.60):
-                next_switch_t_s += 8
-            else:
-                next_switch_t_s += 4
-            #do the req
-            new_request(curr_scores[0]['index'], curr_rep, starttime )
-            print('requested to switch Stream')
+        if tmp_s is not None:
+            if tmp_s.index != curr_stream_index:
+                curr_stream_index = tmp_s.index
+                prev_stream_id = curr_stream_id
+                curr_stream_id = FILE_LIST[tmp_s.index]
+                curr_rep = tmp_s.representation
+                last_Sswitch_t = t - NETWORK_INTERVAL_MS / float(1000)
+            if tmp_s.representation != curr_rep:
+                curr_rep = tmp_s.representation
+                last_Qswitch_t = t - NETWORK_INTERVAL_MS / float(1000)
+        else:
+            print('failed to fetch segment')
 
         if b_t_remaining == 0.0:
             print('ZERO BUFFER')
@@ -356,9 +392,28 @@ def recreate_scs():
             log('abnormal buffer value', -1)
 
 # TODO evaluate state
-        if isBuffering:
+#first check for programmed stream switches
+        if (next_switch_t_s == t + NETWORK_INTERVAL_MS / float(1000) and not isBuffering):
+            print('we will request to change stream. current stream status: ', request['status'])
+            next_switch_t_s = switch_stream(next_switch_t_s, curr_rep)
+            # starttime = next_switch_t_s
+            # if (curr_scores[0]['S'] > 0.75):
+            #     next_switch_t_s += 12
+            #     print('next stream switch at ', next_switch_t_s, 'with score ', curr_scores[0]['S'])
+            # elif (curr_scores[0]['S'] > 0.60):
+            #     next_switch_t_s += 8
+            #     print('next stream switch at ', next_switch_t_s, 'with score ', curr_scores[0]['S'])
+            # else:
+            #     next_switch_t_s += 4
+            #     print('next stream switch at ', next_switch_t_s, 'with score ', curr_scores[0]['S'])
+            # #do the req
+            # new_request(curr_scores[0]['index'], curr_rep, starttime)
+            print('requested to switch Stream')
+        elif isBuffering:
             if request['status'] != ['EMPTY'] or request['status'] != ['FAILED']:
-                print('TODO we should make a request')
+                print('buffering - we switch to LoQ')
+                tmp_rep = 2
+                next_switch_t_s = switch_stream(last_fetched_segment_start_t + seg_duration, tmp_rep)
             else:
                 print('TODO req status is ' + request['status'])
         else:
@@ -366,9 +421,23 @@ def recreate_scs():
                 print('TODO do nothing - buffer full')
             else:
                 if 0.5 >= b_t_remaining > 0:
-                    if curr_rep == 0 and t - last_Sswitch_t < 2.0:
-                        print('TODO fetch HiQ seg')
-                    else:
+                    if curr_rep == 0 and not isBuffering:    #we are in HiQ and keep HiQ
+                        if request['status'] == 'PENDING':
+                            print('we are skipping HiQ request - we have a pending request')
+                        elif request['status'] == 'EMPTY':
+                            new_request(curr_stream_index, 0, t + b_t_remaining)
+                            print('fetch HiQ seg request issued for seg at time ', t + b_t_remaining)
+                        else:
+                            log('Unknown Request status', -1)
+                    elif curr_rep > 0 and t - last_Sswitch_t < 2.0:    #we 'just' switch stream to LoQ and switching to HiQ
+                        if request['status'] == 'PENDING':
+                            print('we are skipping switch to HiQ- we have a pending request')
+                        else:
+                            tmp_rep = 0
+                            print('req status ', request['status'])
+                            new_request(curr_stream_index, tmp_rep, t + b_t_remaining)
+                            print('switch to HiQ (from LoQ)- seg request issued for seg at time ', t + b_t_remaining)
+                    else:    #we are in LoQ and stay in LoQ
                         print('TODO fetch LoQ seg')
                 else:
                     print('do not nothing, time left in buffer: %f', b_t_remaining)
@@ -387,7 +456,6 @@ def recreate_scs():
 # TODO issue request
 
 # TODO update logs
-
 
 #whether we should use generated network trace, or use existing (for comparison)
 trace_exists = True
