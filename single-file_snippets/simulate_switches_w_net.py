@@ -17,11 +17,14 @@ NETWORK_INTERVAL_MS = 500
 P_of_Qswitch = [0.002, 0.05, 0.002, 0.05, 0.002, 0.002, 0.05, 0.002]
 #P boost when link is good and we are in bad Q
 P_GOOD_BOOST = 0.2
+#adaptation policy
+ADAPTATION_POLICY = 'CONSERVATIVE'
 #if the quality of the link is good, it has higher P to return to HiQ
 L_quality_good = [True, False, True, False, True, True, False, True]
 #filename + suffix = metric filename
 METRIC_SUFFIX = "_metrics.json"
 DIR = "C:\\Users\\theid\\Desktop\\tests\\fake_test\\test_2\\"
+FILE_OUT = "Scs31.json"
 metrics = []
 metric_ids = []
 
@@ -102,6 +105,14 @@ def next_value(cur_value, P_in, isGood):
     return cur_value
 
 
+def flush_json_to_file_out(filename, data):
+    if not os.path.exists(DIR):
+        print(os.mkdir(DIR))
+#with open(os.getcwd()+'/'+DIR+'/OUT_'+filename, 'w+') as f:
+    with open(DIR + filename, 'w+') as f:
+        json.dump(data, f)
+
+
 #inputs the previous states of network (reps) and returns the next
 def network_state(previous_state):
     current_state = []
@@ -125,13 +136,13 @@ def find_entry_at_time(t_in, metric):
 
 
 #returns scores at time given, excluding the static views
-def find_scores_at_time(t_in):
+def find_scores_at_time(t_in, with_static = False):
     i = 0
     curr_scores = []
     for metric in metrics:
         score_in = find_entry_at_time(t_in, metric)
         score_in["id"] = metric_ids[i]
-        if (STATIC_VIEWS.count(metric_ids[i]) > 0):
+        if (not with_static and STATIC_VIEWS.count(metric_ids[i]) > 0):
             i += 1
             continue
         score_in["index"] = i
@@ -295,6 +306,8 @@ curr_stream_index = -1
 prev_stream_id = ""
 next_stream_id = ""
 
+
+
 def recreate_scs():
 
     #current time
@@ -396,24 +409,18 @@ def recreate_scs():
         if (next_switch_t_s == t + NETWORK_INTERVAL_MS / float(1000) and not isBuffering):
             print('we will request to change stream. current stream status: ', request['status'])
             next_switch_t_s = switch_stream(next_switch_t_s, curr_rep)
-            # starttime = next_switch_t_s
-            # if (curr_scores[0]['S'] > 0.75):
-            #     next_switch_t_s += 12
-            #     print('next stream switch at ', next_switch_t_s, 'with score ', curr_scores[0]['S'])
-            # elif (curr_scores[0]['S'] > 0.60):
-            #     next_switch_t_s += 8
-            #     print('next stream switch at ', next_switch_t_s, 'with score ', curr_scores[0]['S'])
-            # else:
-            #     next_switch_t_s += 4
-            #     print('next stream switch at ', next_switch_t_s, 'with score ', curr_scores[0]['S'])
-            # #do the req
-            # new_request(curr_scores[0]['index'], curr_rep, starttime)
             print('requested to switch Stream')
         elif isBuffering:
             if request['status'] != ['EMPTY'] or request['status'] != ['FAILED']:
-                print('buffering - we switch to LoQ')
                 tmp_rep = 2
-                next_switch_t_s = switch_stream(last_fetched_segment_start_t + seg_duration, tmp_rep)
+                if(ADAPTATION_POLICY == 'AGGRESSIVE'):
+                    print('buffering in aggressive - we switch stream')
+                    next_switch_t_s = switch_stream(last_fetched_segment_start_t + seg_duration, tmp_rep)
+                elif(ADAPTATION_POLICY == 'CONSERVATIVE'):
+                    print('buffering in conservative - we switch quality')
+                    new_request(curr_stream_index, tmp_rep, last_fetched_segment_start_t + seg_duration)
+                else:
+                    log('adaptation policy unknown', -1)
             else:
                 print('TODO req status is ' + request['status'])
         else:
@@ -428,7 +435,7 @@ def recreate_scs():
                             new_request(curr_stream_index, 0, t + b_t_remaining)
                             print('fetch HiQ seg request issued for seg at time ', t + b_t_remaining)
                         else:
-                            log('Unknown Request status', -1)
+                            log('TODO Unknown Request status', -1)
                     elif curr_rep > 0 and t - last_Sswitch_t < 2.0:    #we 'just' switch stream to LoQ and switching to HiQ
                         if request['status'] == 'PENDING':
                             print('we are skipping switch to HiQ- we have a pending request')
@@ -437,25 +444,36 @@ def recreate_scs():
                             print('req status ', request['status'])
                             new_request(curr_stream_index, tmp_rep, t + b_t_remaining)
                             print('switch to HiQ (from LoQ)- seg request issued for seg at time ', t + b_t_remaining)
+                    elif curr_rep > 0 and not isBuffering:    #we are in LoQ and stay in LoQ (conservative adaptation)
+                        if ADAPTATION_POLICY != 'CONSERVATIVE':
+                            log('WARNING: you are not in CONSERVATIVE adaptation and request LoQ segs',0)
+                        new_request(curr_stream_index, curr_rep, last_fetched_segment_start_t + seg_duration)
                     else:    #we are in LoQ and stay in LoQ
-                        print('TODO fetch LoQ seg')
+                        log('This is a fallback safety check', -1)
                 else:
                     print('do not nothing, time left in buffer: %f', b_t_remaining)
+        curr_score = {}
+        for s_ in find_scores_at_time(t, True):
+            if s_['id'] == curr_stream_id:
+                curr_score = s_
+                break
+        t_abs = t + s_['t_abs'] - s_['t_elapsed']
+        
         scene_logs.append({
             'id': curr_stream_id,
             'index': curr_stream_index,
             'rep': curr_rep,
-            't_abs': 'TODO',
+            't_abs': t_abs,
             't_elapsed': t,
             'is_buffering': isBuffering,
             'is_buffer_full': isBufferFull,
             'Score': find_score_for_id(curr_scores, curr_stream_id)
         })
-
-
-# TODO issue request
-
-# TODO update logs
+        if t > 89 and True:
+            flush_json_to_file_out(FILE_OUT, scene_logs)
+            print('DONE')
+            input('exit?')
+            exit(0)
 
 #whether we should use generated network trace, or use existing (for comparison)
 trace_exists = True
