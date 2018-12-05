@@ -73,7 +73,7 @@ def process_file(f_in, extension):
     with open(f_in + extension, 'r') as file_in:
         data = json.load(file_in)
         clips = []
-        score_csv = 'Time (t_video), Stream ID, Rep, Score \n'  #used for score logging
+        score_csv = 'Time (t_video), Stream ID, Rep, Score \n'    #used for score logging
         for elem in data:
             #first log scores
             try:
@@ -83,10 +83,10 @@ def process_file(f_in, extension):
             #then parse clips for building video sequence
             if len(clips) is 0:
                 clips.append(elem)
-            elif clips[len(clips) - 1]['index'] != elem['index'] or clips[len(clips) - 1]['rep'] != elem['rep']:
+            elif clips[len(clips) - 1]['index'] != elem['index'] or clips[len(clips) - 1]['rep'] != elem['rep'] or elem['is_buffering'] != clips[len(clips) - 1]['is_buffering']:
                 clips.append(elem)
             #exit the iteration when we havethe desired duration
-            if(elem['t_elapsed'] > MIN_LENGTH_S):
+            if (MIN_LENGTH_S and elem['t_elapsed'] > MIN_LENGTH_S):
                 break
         #flush scores
         with open(OUTDIR + '/' + S_OUT_FILE, 'a') as sfile:
@@ -97,18 +97,30 @@ def process_file(f_in, extension):
             'filename': construct_filename(clips[0]['id'], clips[0]['rep']),
             'duration': 0,
             'id': clips[0]['id'],
-            'rep': clips[0]['rep']
+            'rep': clips[0]['rep'],
+            'is_buffering': False
         }
         part_count = 0
         pl = ''
         for elem in clips:
-            if elem['id'] != clip['id'] or elem['rep'] != clip['rep']:
+            if elem['id'] != clip['id'] or elem['rep'] != clip['rep'] or elem['is_buffering'] != clip['is_buffering']:
                 #flush previous clip
                 clip['duration'] = elem['t_elapsed'] - clip['start_abs']
-                str_to_run = 'ffmpeg.exe -i ' + clip[
-                    'filename'] + ' -r 30 -preset slow -vf scale=-1:720 -c:v libx264 -b:v 10000k -c:a copy -ss ' + str(
-                        clip['start_vfile']) + ' -t ' + str(clip['duration']) + ' ' + OUTDIR + '/' + str(part_count) + '.mp4'
-                pl += 'file ' + str(part_count) + '.mp4 \n'
+                if clip['is_buffering']:
+                    #ffmpeg -ss 01:23:45 -i input -vframes 1 -q:v 2 output.jpg
+                    extract_frame = 'ffmpeg.exe -i ' + clip['filename'] + ' -ss ' + str(
+                        clip['start_vfile']) + ' -vframes 1 -q:v 1 ' + OUTDIR + '/' + str(part_count) + '.jpg'
+                    log(extract_frame, 0)
+                    os.system(extract_frame)
+                    str_to_run = 'ffmpeg.exe -loop 1 -i ' + OUTDIR + '/' + str(
+                        part_count) + '.jpg' + ' -r 30 -preset slow -vf scale=-1:720 -c:v libx264 -b:v 10000k -ss ' + str(
+                            clip['start_vfile']) + ' -t ' + str(clip['duration']) + ' ' + OUTDIR + '/' + str(part_count) + '.mp4'
+                    pl += 'file ' + str(part_count) + '.mp4 \n'
+                else:
+                    str_to_run = 'ffmpeg.exe -i ' + clip[
+                        'filename'] + ' -r 30 -preset slow -vf scale=-1:720 -c:v libx264 -b:v 10000k -c:a copy -ss ' + str(
+                            clip['start_vfile']) + ' -t ' + str(clip['duration']) + ' ' + OUTDIR + '/' + str(part_count) + '.mp4'
+                    pl += 'file ' + str(part_count) + '.mp4 \n'
                 log(str_to_run, 0)
                 #os.system('ffmpeg -i '+clip['filaname']+' -ss '+00:09+'' -t 5 guide-out-1.mp4')
                 #start new clip
@@ -118,6 +130,7 @@ def process_file(f_in, extension):
                 clip['duration'] = 0
                 clip['id'] = elem['id']
                 clip['rep'] = elem['rep']
+                clip['is_buffering'] = elem['is_buffering']
                 part_count += 1
                 os.system(str_to_run)
         with open(OUTDIR + '/' + PL_FILE, 'a') as plfile:
