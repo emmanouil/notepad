@@ -4,14 +4,15 @@ import os
 import datetime
 import re
 
-TEST = '4-8'
+TEST = '31'
 INFILE = 'Scs' + TEST + '.json'
 LOGFILE = 'python_script.log'
 OUTDIR = 'p_out'
 PL_FILE = 'clips-list.txt'
 V_OUT_FILE = 'clips' + TEST + '.mp4'
 S_OUT_FILE = 'score' + TEST + '.csv'
-MIN_LENGTH_S = 77
+MIN_LENGTH_DATA_S = 0
+MIN_VIDEO_LENGTH_S = 77
 
 
 ##	Log
@@ -83,10 +84,11 @@ def process_file(f_in, extension):
             #then parse clips for building video sequence
             if len(clips) is 0:
                 clips.append(elem)
-            elif clips[len(clips) - 1]['index'] != elem['index'] or clips[len(clips) - 1]['rep'] != elem['rep'] or elem['is_buffering'] != clips[len(clips) - 1]['is_buffering']:
+            elif clips[len(clips) - 1]['index'] != elem['index'] or clips[
+                    len(clips) - 1]['rep'] != elem['rep'] or elem['is_buffering'] != clips[len(clips) - 1]['is_buffering']:
                 clips.append(elem)
             #exit the iteration when we havethe desired duration
-            if (MIN_LENGTH_S and elem['t_elapsed'] > MIN_LENGTH_S):
+            if (MIN_LENGTH_DATA_S and elem['t_elapsed'] > MIN_LENGTH_DATA_S):
                 break
         #flush scores
         with open(OUTDIR + '/' + S_OUT_FILE, 'a') as sfile:
@@ -135,7 +137,12 @@ def process_file(f_in, extension):
                 os.system(str_to_run)
         with open(OUTDIR + '/' + PL_FILE, 'a') as plfile:
             plfile.write(pl)
-        os.system('ffmpeg.exe -f concat -i ' + OUTDIR + '/' + PL_FILE + ' -c copy ' + OUTDIR + '/' + V_OUT_FILE)
+        if (MIN_VIDEO_LENGTH_S):
+            os.system('ffmpeg.exe -f concat -i ' + OUTDIR + '/' + PL_FILE + ' -t ' + str(MIN_VIDEO_LENGTH_S) + ' -c copy ' + OUTDIR + '/' +
+                      V_OUT_FILE)
+        else:
+            os.system('ffmpeg.exe -f concat -i ' + OUTDIR + '/' + PL_FILE + ' -c copy ' + OUTDIR + '/' + V_OUT_FILE)
+
         #merge here
 
 
