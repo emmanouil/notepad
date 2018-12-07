@@ -1,3 +1,6 @@
+
+
+
 import sys
 import json
 import os
@@ -27,6 +30,8 @@ DIR = "C:\\Users\\theid\\Desktop\\tests\\fake_test\\test_2\\"
 FILE_OUT = "Scs31.json"
 metrics = []
 metric_ids = []
+HIGH_REP = 0
+LOW_REP = 2
 
 #initial network trace
 network_trace = [[0, 0, 0, 0, 0, 0, 0, 0]]
@@ -93,14 +98,14 @@ def load_files():
 
 
 def next_value(cur_value, P_in, isGood):
-    if (isGood and cur_value > 0):
+    if (isGood and cur_value > HIGH_REP):
         p_switch = P_in + P_GOOD_BOOST
     else:
         p_switch = P_in
     if (random.random() < p_switch):
-        if (cur_value == 0):
+        if (cur_value == HIGH_REP):
             return 2
-        if (cur_value == 2):
+        if (cur_value == LOW_REP):
             return 0
     return cur_value
 
@@ -192,11 +197,12 @@ p = {
 
 
 class Segment:
-    def __init__(self, t_start, duration, stream_index, representation):
+    def __init__(self, t_start, duration, stream_index, representation, t_arrival = 0):
         self.t_start = t_start
         self.duration = duration
         self.index = stream_index
         self.representation = representation
+        self.t_arrival = t_arrival
 
 
 class Buffer:
@@ -216,7 +222,10 @@ class Buffer:
                 if self.segs[i].t_start == s.t_start:
                     j += 1
                     if (j > 1):
-                        self.segs.remove(s)
+                        if s.t_arrival < self.segs[i].t_arrival:
+                            self.segs.remove(s)
+                        else:
+                            self.segs.remove(self.segs[i])
         #calculate length
         for i in range(0, len(self.segs)):
             s = self.segs[i]
@@ -316,6 +325,8 @@ def recreate_scs():
 
     #current time
     t = 0.0
+    #
+    WITH_BUFFERING = False
 
     #next switch time
     next_switch_t_s = 2.0
@@ -350,11 +361,12 @@ def recreate_scs():
 
         #update time
         t = t_ms / float(1000)
+        print('t now: ',t)
 
         #fullfill requests
         if request['status'] == 'PENDING':
             if is_stream_available(request['index'], request['representation'], request['segment_t']):
-                s_in = Segment(request['segment_t'], seg_duration, request['index'], request['representation'])
+                s_in = Segment(request['segment_t'], seg_duration, request['index'], request['representation'], t)
                 b.push_segment(s_in)
                 request['status'] = 'EXECUTED'
                 last_fetched_segment_start_t = request['segment_t']
@@ -431,7 +443,7 @@ def recreate_scs():
             if isBufferFull:
                 print('TODO do nothing - buffer full')
             else:
-                if 0.5 >= b_t_remaining > 0:
+                if WITH_BUFFERING and 0.5 >= b_t_remaining > 0:
                     if curr_rep == 0 and not isBuffering:    #we are in HiQ and keep HiQ
                         if request['status'] == 'PENDING':
                             print('we are skipping HiQ request - we have a pending request')
@@ -454,6 +466,37 @@ def recreate_scs():
                         new_request(curr_stream_index, curr_rep, last_fetched_segment_start_t + seg_duration)
                     else:    #we are in LoQ and stay in LoQ
                         log('This is a fallback safety check', -1)
+                elif 0.5 >= b_t_remaining > 0:
+                    log('Buffer running low', 0)
+                elif not WITH_BUFFERING and 0.5 < b_t_remaining < 2.0:
+                    tmp_s = b.peek_segment_at_time(t + b_t_remaining + 0.1)
+                    if not tmp_s:
+                        if curr_rep == HIGH_REP and not isBuffering:    #we are in HiQ and keep HiQ
+                            if request['status'] == 'PENDING':
+                                print('we are skipping HiQ request - we have a pending request')
+                            if request['status'] == 'FAILED' and b_t_remaining < 1.5:
+                                print('failed to fetch HiQ, switch to LoQ')
+                                new_request(curr_stream_index, LOW_REP, t + b_t_remaining)
+                            elif request['status'] == 'EMPTY':
+                                new_request(curr_stream_index, HIGH_REP, t + b_t_remaining)
+                                print('fetch HiQ seg request issued for seg at time ', t + b_t_remaining)
+                            else:
+                                log('TODO Unknown Request status', -1)
+                        elif curr_rep > HIGH_REP and t - last_Sswitch_t < 2.0:    #we 'just' switch stream to LoQ and switching to HiQ
+                            if request['status'] == 'PENDING':
+                                print('we are skipping switch to HiQ- we have a pending request')
+                            elif request['status'] == 'FAILED':
+                                print('we are skipping switch to HiQ completely')
+                                new_request(curr_stream_index, LOW_REP, t + b_t_remaining)
+                            else:
+                                tmp_rep = HIGH_REP
+                                print('req status ', request['status'])
+                                new_request(curr_stream_index, tmp_rep, t + b_t_remaining)
+                                print('switch to HiQ (from LoQ)- seg request issued for seg at time ', t + b_t_remaining)
+                        elif curr_rep > HIGH_REP and not isBuffering:    #we are in LoQ and stay in LoQ (conservative adaptation)
+                            if ADAPTATION_POLICY != 'CONSERVATIVE':
+                                log('WARNING: you are not in CONSERVATIVE adaptation and request LoQ segs', 0)
+                            new_request(curr_stream_index, curr_rep, last_fetched_segment_start_t + seg_duration)
                 else:
                     print('do nothing, time left in buffer: %f', b_t_remaining)
         curr_score = {}
