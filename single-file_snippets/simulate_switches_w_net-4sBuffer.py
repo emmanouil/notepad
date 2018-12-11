@@ -1,6 +1,3 @@
-
-
-
 import sys
 import json
 import os
@@ -8,6 +5,9 @@ import datetime
 import re
 import random
 import pickle
+
+FOV_ONLY = False
+WITH_STALLING = False
 
 FILE_LIST = [
     "A002C001_140325E3", "20140325_121238", "Take5_Nexus5", "20140325_121245", "20140325_131253", "IMG_0367", "VID_20140325_131247",
@@ -26,8 +26,8 @@ ADAPTATION_POLICY = 'CONSERVATIVE'
 L_quality_good = [True, False, True, False, True, True, False, True]
 #filename + suffix = metric filename
 METRIC_SUFFIX = "_metrics.json"
-DIR = "C:\\Users\\theid\\Desktop\\tests\\fake_test\\test_2\\"
-FILE_OUT = "Scs31.json"
+DIR = "C:\\Users\\theid\\Desktop\\tests\\fake_test\\"
+FILE_OUT = "Scs42.json"
 metrics = []
 metric_ids = []
 HIGH_REP = 0
@@ -83,6 +83,7 @@ def log(msg, lvl):
         elif (lvl == 0):    #dbg
             print('\033[35;1m' + '[DEBUG]\t' + '\033[0m' + msg)
             logfile.write(str_now + '[DEBUG]\t' + msg)
+            input('continuuue?')
 
 
 def load_file(id, suffix):
@@ -197,7 +198,7 @@ p = {
 
 
 class Segment:
-    def __init__(self, t_start, duration, stream_index, representation, t_arrival = 0):
+    def __init__(self, t_start, duration, stream_index, representation, t_arrival=0):
         self.t_start = t_start
         self.duration = duration
         self.index = stream_index
@@ -284,6 +285,31 @@ def new_request(index, rep, starttime):
     request['segment_t'] = starttime
 
 
+def switch_stream_FOV_only(t_in, rep):
+    global curr_stream_id
+    global curr_stream_index
+    global prev_stream_id
+
+    curr_scores = find_scores_at_time(t_in)
+    curr_scores = clean_and_sort_scores(curr_scores)
+
+    tmp_scores = []
+    for i in range(0, len(curr_scores)):
+        if curr_scores[i]['id'] == curr_stream_id or curr_scores[i]['id'] == prev_stream_id:
+            continue
+        else:
+            tmp_scores.append(curr_scores[i])
+
+    tmp_index = random.randint(0, len(tmp_scores) - 1)
+    next_switch_t = t_in + (random.randint(0, 6) * 2)
+    print('next stream switch at ', next_switch_t, 'with score ', tmp_scores[tmp_index]['S'])
+
+    #do the req
+    new_request(tmp_scores[tmp_index]['index'], rep, t_in)
+    print('requested to switch Stream to ', tmp_scores[tmp_index]['id'])
+    return next_switch_t
+
+
 def switch_stream(t_in, rep):
     global curr_stream_id
     global curr_stream_index
@@ -326,7 +352,7 @@ def recreate_scs():
     #current time
     t = 0.0
     #
-    WITH_BUFFERING = False
+    WITH_BUFFERING = WITH_STALLING
 
     #next switch time
     next_switch_t_s = 2.0
@@ -337,7 +363,7 @@ def recreate_scs():
     #is the buffer full
     isBufferFull = False
     #virtual buffer size (in s)
-    B_size = 2.5
+    B_size = 4.0
     #current representation (0 - High, or 2 - Low)
     curr_rep = 0
     #time of buffered video remaining
@@ -354,6 +380,7 @@ def recreate_scs():
     last_Qswitch_t = 0.0
     last_Sswitch_t = 0.0
     last_fetched_segment_end_t = 2.0
+    last_succ_req_t = 0.0
 
     #emulate timeline
     for t_ms in range(0, 200000, NETWORK_INTERVAL_MS):
@@ -361,11 +388,14 @@ def recreate_scs():
 
         #update time
         t = t_ms / float(1000)
-        print('t now: ',t)
+        print('t now: ', t)
 
         #fullfill requests
         if request['status'] == 'PENDING':
             if is_stream_available(request['index'], request['representation'], request['segment_t']):
+                if (request['segment_t'] - last_succ_req_t < 2.0):
+                    print('test')
+                last_succ_req_t = request['segment_t']
                 s_in = Segment(request['segment_t'], seg_duration, request['index'], request['representation'], t)
                 b.push_segment(s_in)
                 request['status'] = 'EXECUTED'
@@ -413,7 +443,7 @@ def recreate_scs():
             print('between 0.5 and 1.5')
             isBuffering = False
             isBufferFull = False
-        elif 2.5 >= b_t_remaining > 1.5:
+        elif 4 >= b_t_remaining > 1.5:
             print('FULL')
             isBuffering = False
             isBufferFull = True
@@ -424,14 +454,20 @@ def recreate_scs():
 #first check for programmed stream switches
         if (next_switch_t_s == t + NETWORK_INTERVAL_MS / float(1000) and not isBuffering):
             print('we will request to change stream. current stream status: ', request['status'])
-            next_switch_t_s = switch_stream(next_switch_t_s, curr_rep)
+            if FOV_ONLY:
+                next_switch_t_s = switch_stream_FOV_only(next_switch_t_s, curr_rep)
+            else:
+                next_switch_t_s = switch_stream(next_switch_t_s, curr_rep)
             print('requested to switch Stream')
         elif isBuffering:
             if request['status'] != ['EMPTY'] or request['status'] != ['FAILED']:
                 tmp_rep = 2
                 if (ADAPTATION_POLICY == 'AGGRESSIVE'):
                     print('buffering in aggressive - we switch stream')
-                    next_switch_t_s = switch_stream(last_fetched_segment_start_t + seg_duration, tmp_rep)
+                    if FOV_ONLY:
+                        next_switch_t_s = switch_stream_FOV_only(last_fetched_segment_start_t + seg_duration, tmp_rep)
+                    else:
+                        next_switch_t_s = switch_stream(last_fetched_segment_start_t + seg_duration, tmp_rep)
                 elif (ADAPTATION_POLICY == 'CONSERVATIVE'):
                     print('buffering in conservative - we switch quality')
                     new_request(curr_stream_index, tmp_rep, last_fetched_segment_start_t + seg_duration)
