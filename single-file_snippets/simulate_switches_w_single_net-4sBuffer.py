@@ -438,13 +438,7 @@ def recreate_scs():
         elif isBuffering:
             if request['status'] != ['EMPTY'] or request['status'] != ['FAILED']:
                 tmp_rep = 2
-                if (ADAPTATION_POLICY == 'AGGRESSIVE'):
-                    print('buffering in aggressive - we switch stream')
-                    if FOV_ONLY:
-                        next_switch_t_s = switch_stream_FOV_only(last_fetched_segment_start_t + seg_duration, tmp_rep)
-                    else:
-                        next_switch_t_s = switch_stream(last_fetched_segment_start_t + seg_duration, tmp_rep)
-                elif (ADAPTATION_POLICY == 'CONSERVATIVE'):
+                if (ADAPTATION_POLICY == 'CONSERVATIVE'):
                     print('buffering in conservative - we switch quality')
                     new_request(curr_stream_index, tmp_rep, last_fetched_segment_start_t + seg_duration)
                 else:
