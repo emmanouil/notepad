@@ -500,7 +500,10 @@ def recreate_scs():
             'Score': find_score_for_id(curr_scores, curr_stream_id)
         })
         if t > 89 and True:
-            flush_json_to_file_out(FILE_OUT, scene_logs)
+            if FOV_ONLY:
+                flush_json_to_file_out(FILE_OUT + '-FOV_ONLY' + FILE_OUT_EXTENSION, scene_logs)
+            else:
+                flush_json_to_file_out(FILE_OUT + FILE_OUT_EXTENSION, scene_logs)
             print('DONE')
             input('exit?')
             exit(0)
