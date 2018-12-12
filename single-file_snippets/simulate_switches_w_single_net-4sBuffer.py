@@ -8,7 +8,6 @@ import pickle
 #custom imports
 import net_works
 
-
 FOV_ONLY = False
 WITH_STALLING = False
 
@@ -24,7 +23,8 @@ ADAPTATION_POLICY = 'CONSERVATIVE'
 #filename + suffix = metric filename
 METRIC_SUFFIX = "_metrics.json"
 DIR = "C:\\Users\\theid\\Desktop\\tests\\fake_test\\"
-FILE_OUT = "Scs42.json"
+FILE_OUT = "Scs45"
+FILE_OUT_EXTENSION = ".json"
 metrics = []
 metric_ids = []
 HIGH_REP = 0
@@ -47,7 +47,7 @@ scs = [{
     "Score": 0
 }]
 
-TEST = '4-10'
+TEST = '22'
 INFILE = 'Scs' + TEST + '.json'
 LOGFILE = 'python_script.log'
 OUTDIR = 'p_out'
@@ -98,12 +98,11 @@ def load_files():
 def flush_json_to_file_out(filename, data):
     if not os.path.exists(DIR):
         print(os.mkdir(DIR))
+
+
 #with open(os.getcwd()+'/'+DIR+'/OUT_'+filename, 'w+') as f:
     with open(DIR + filename, 'w+') as f:
         json.dump(data, f)
-
-
-
 
 
 def find_entry_at_time(t_in, metric):
@@ -207,16 +206,19 @@ class Buffer:
             self.segs.remove(s)
         tmp_dur = self.get_duration(t_now)
         if 0 > tmp_dur:
-            log('BUFFER UNDERFLOW', 0)
+            log('BUFFER UNDERFLOW', -1)
         elif tmp_dur > self.size_segs * seg_duration:
-            log('BUFFER OVERFLOW', 0)
+            log('BUFFER OVERFLOW', -1)
         return tmp_dur
 
     def get_duration(self, t_now):
         dur = 0.0
         for s in self.segs:
             if (s.t_start + s.duration >= t_now):
-                dur += s.t_start + s.duration - t_now
+                if s.t_start >= t_now:
+                    dur += s.duration
+                else:
+                    dur += s.t_start + s.duration - t_now
         return dur
 
     def peek_segment_at_time(self, t_now):
@@ -230,6 +232,7 @@ def is_stream_available(index_in, rep_in, t_in):
     if (network_trace[int(t_in)][index_in] <= rep_in):
         return True
     return False
+
 
 def is_stream_available_single_stream(index_in, rep_in, t_in):
     if (network_trace[int(t_in)] <= rep_in):
@@ -419,14 +422,14 @@ def recreate_scs():
             print('between 0.5 and 1.5')
             isBuffering = False
             isBufferFull = False
-        elif 4 >= b_t_remaining > 1.5:
+        elif 3 >= b_t_remaining > 1.5:
             print('FULL')
             isBuffering = False
             isBufferFull = True
         else:
             log('abnormal buffer value', -1)
 
-# TODO evaluate state
+#evaluate state
 #first check for programmed stream switches
         if (next_switch_t_s == t + NETWORK_INTERVAL_MS / float(1000) and not isBuffering):
             print('we will request to change stream. current stream status: ', request['status'])
@@ -512,6 +515,7 @@ def recreate_scs():
 #whether we should use generated network trace, or use existing (for comparison)
 trace_exists = True
 trace_filename = 'net_trace_single.pickle'
+
 
 def main():
     global network_trace

@@ -236,16 +236,19 @@ class Buffer:
             self.segs.remove(s)
         tmp_dur = self.get_duration(t_now)
         if 0 > tmp_dur:
-            log('BUFFER UNDERFLOW', 0)
+            log('BUFFER UNDERFLOW', -1)
         elif tmp_dur > self.size_segs * seg_duration:
-            log('BUFFER OVERFLOW', 0)
+            log('BUFFER OVERFLOW', -1)
         return tmp_dur
 
     def get_duration(self, t_now):
         dur = 0.0
         for s in self.segs:
             if (s.t_start + s.duration >= t_now):
-                dur += s.t_start + s.duration - t_now
+                if s.t_start >= t_now:
+                    dur += s.duration
+                else:
+                    dur += s.t_start + s.duration - t_now
         return dur
 
     def peek_segment_at_time(self, t_now):
