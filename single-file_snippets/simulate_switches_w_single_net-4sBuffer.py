@@ -455,30 +455,7 @@ def recreate_scs():
             if isBufferFull:
                 print('TODO do nothing - buffer full')
             else:
-                if WITH_BUFFERING and 0.5 >= b_t_remaining > 0:
-                    if curr_rep == 0 and not isBuffering:    #we are in HiQ and keep HiQ
-                        if request['status'] == 'PENDING':
-                            print('we are skipping HiQ request - we have a pending request')
-                        elif request['status'] == 'EMPTY':
-                            new_request(curr_stream_index, 0, t + b_t_remaining)
-                            print('fetch HiQ seg request issued for seg at time ', t + b_t_remaining)
-                        else:
-                            log('TODO Unknown Request status', -1)
-                    elif curr_rep > 0 and t - last_Sswitch_t < 2.0:    #we 'just' switch stream to LoQ and switching to HiQ
-                        if request['status'] == 'PENDING':
-                            print('we are skipping switch to HiQ- we have a pending request')
-                        else:
-                            tmp_rep = 0
-                            print('req status ', request['status'])
-                            new_request(curr_stream_index, tmp_rep, t + b_t_remaining)
-                            print('switch to HiQ (from LoQ)- seg request issued for seg at time ', t + b_t_remaining)
-                    elif curr_rep > 0 and not isBuffering:    #we are in LoQ and stay in LoQ (conservative adaptation)
-                        if ADAPTATION_POLICY != 'CONSERVATIVE':
-                            log('WARNING: you are not in CONSERVATIVE adaptation and request LoQ segs', 0)
-                        new_request(curr_stream_index, curr_rep, last_fetched_segment_start_t + seg_duration)
-                    else:    #we are in LoQ and stay in LoQ
-                        log('This is a fallback safety check', -1)
-                elif 0.5 >= b_t_remaining > 0:
+                if 0.5 >= b_t_remaining > 0:
                     log('Buffer running low', 0)
                 elif not WITH_BUFFERING and 0.5 < b_t_remaining < 2.0:
                     tmp_s = b.peek_segment_at_time(t + b_t_remaining + 0.1)
