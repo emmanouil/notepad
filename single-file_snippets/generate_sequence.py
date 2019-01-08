@@ -3,41 +3,18 @@ import json
 import os
 import datetime
 import re
+from logs import log
 
-TEST = '31'
+TEST = '41-2'
 INFILE = 'Scs' + TEST + '.json'
 LOGFILE = 'python_script.log'
-OUTDIR = 'p_out'
+OUTDIR = "D:\\Gits\\ugc-streaming-tests\\out"
+ASSETSDIR = "D:\\Gits\\ugc-streaming-tests\\assets"
 PL_FILE = 'clips-list.txt'
 V_OUT_FILE = 'clips' + TEST + '.mp4'
 S_OUT_FILE = 'score' + TEST + '.csv'
 MIN_LENGTH_DATA_S = 0
 MIN_VIDEO_LENGTH_S = 77
-
-
-##	Log
-#
-#	lvl = None log to console
-#		< 0 ERROR
-#		> 0 INFO
-#		= 0 Debug
-def log(msg, lvl):
-    now = datetime.datetime.now()
-    str_now = '\n' + str(now.day) + '/' + str(now.month) + '/' + str(now.year) + ' ' + str(now.hour) + ':' + str(now.minute) + ':' + str(
-        now.second) + ' '
-    str_now = str_now.ljust(19)
-    with open(LOGFILE, 'a') as logfile:
-        if (lvl is None):    #normal
-            print(msg)
-        elif (lvl < 0):    #error
-            print('\033[31;1m' + '[ERROR]\t' + '\033[0m' + msg)
-            logfile.write(str_now + '[ERROR]\t' + msg)
-        elif (lvl > 0):    #info
-            print('\033[32m' + '[INFO]\t' + '\033[0m' + msg)
-            logfile.write(str_now + '[INFO]\t' + msg)
-        elif (lvl == 0):    #dbg
-            print('\033[35;1m' + '[DEBUG]\t' + '\033[0m' + msg)
-            logfile.write(str_now + '[DEBUG]\t' + msg)
 
 
 ##	Checks a file (or filename) for extension
@@ -71,7 +48,7 @@ def construct_filename(name_in, rep):
 #	void
 def process_file(f_in, extension):
     log('Processing file: ' + f_in + extension, 1)
-    with open(f_in + extension, 'r') as file_in:
+    with open(OUTDIR + '/' + f_in + extension, 'r') as file_in:
         data = json.load(file_in)
         clips = []
         score_csv = 'Time (t_video), Stream ID, Rep, Score \n'    #used for score logging
@@ -110,7 +87,7 @@ def process_file(f_in, extension):
                 clip['duration'] = elem['t_elapsed'] - clip['start_abs']
                 if clip['is_buffering']:
                     #ffmpeg -ss 01:23:45 -i input -vframes 1 -q:v 2 output.jpg
-                    extract_frame = 'ffmpeg.exe -i ' + clip['filename'] + ' -ss ' + str(
+                    extract_frame = 'ffmpeg.exe -i ' + ASSETSDIR + '/' + clip['filename'] + ' -ss ' + str(
                         clip['start_vfile']) + ' -vframes 1 -q:v 1 ' + OUTDIR + '/' + str(part_count) + '.jpg'
                     log(extract_frame, 0)
                     os.system(extract_frame)
@@ -119,7 +96,7 @@ def process_file(f_in, extension):
                             clip['start_vfile']) + ' -t ' + str(clip['duration']) + ' ' + OUTDIR + '/' + str(part_count) + '.mp4'
                     pl += 'file ' + str(part_count) + '.mp4 \n'
                 else:
-                    str_to_run = 'ffmpeg.exe -i ' + clip[
+                    str_to_run = 'ffmpeg.exe -i ' + ASSETSDIR + '\\' + clip[
                         'filename'] + ' -r 30 -preset slow -vf scale=-1:720 -c:v libx264 -b:v 10000k -c:a copy -ss ' + str(
                             clip['start_vfile']) + ' -t ' + str(clip['duration']) + ' ' + OUTDIR + '/' + str(part_count) + '.mp4'
                     pl += 'file ' + str(part_count) + '.mp4 \n'
@@ -149,7 +126,7 @@ def process_file(f_in, extension):
 def main():
     #check if called for specific file
     #check this instead: https://docs.python.org/3/library/fileinput.html#module-fileinput
-    file_in = open(INFILE, 'r')
+    file_in = open(OUTDIR + '/' + INFILE, 'r')
     file_name = get_file_name(file_in, '.json')
     if file_name is None:
         exit('Wrong filename')
