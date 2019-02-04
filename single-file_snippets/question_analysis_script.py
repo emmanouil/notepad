@@ -3,6 +3,8 @@ import csv
 import numpy as np
 import matplotlib.pyplot as plt
 import json
+import pandas as pd
+import math
 
 
 
@@ -21,6 +23,7 @@ LIST_OF_MARKER_STYLES = ['o', '^', 'v', 's', 'D', '*']
 SHOW_PLOT1 = False
 SHOW_PLOT2 = True
 SHOW_PLOT3 = False
+SHOW_PLOT4 = False
 
 FLUSH_MEANS_TO_FILE = False
 
@@ -155,7 +158,7 @@ def plot2():
     #ax2.set_title('Complementary Scores per Statement by Video ID')
     ax2.set_xticks(ind2)
     ax2.set_xticklabels(labels)
-    ax2.legend()
+    ax2.legend(loc='upper right')
     ax2.grid(which = 'major', axis='y', linestyle='--')
     plt.show()
 
@@ -193,6 +196,78 @@ def plot3():
     ax3.legend()
     ax3.grid(which = 'major', axis='y', linestyle='--')
     plt.show()
+
+
+def plot4(video_ids):
+    #
+    # plot
+    # radar
+    # - complementary values; without error bars
+    
+    # ------- PART 1: Create background
+   
+    # number of variables
+    N = len(LIST_OF_STATEMENTS)
+    
+    # What will be the angle of each axis in the plot? (we divide the plot / number of variable)
+    angles = [n / float(N) * 2 * math.pi for n in range(N)]
+    angles += angles[:1]
+    
+    # Initialise the spider plot
+    ax = plt.subplot(111, polar=True)
+    
+    # If you want the first axis to be on top:
+    ax.set_theta_offset(math.pi / 2)
+    ax.set_theta_direction(-1)
+    
+    # Draw one axe per variable + add labels labels yet
+    plt.xticks(angles[:-1], LIST_OF_STATEMENTS)
+    
+    # Draw ylabels
+    ax.set_rlabel_position(30)
+    plt.yticks([0,1,2,3,4,5], [0,1,2,3,4,5], color="grey", size=7)
+    plt.ylim(0,5)
+    
+    
+    # ------- PART 2: Add plots
+    
+    # Plot each individual = each line of the data
+    # I don't do a loop, because plotting more than 3 groups makes the chart unreadable
+
+    tmp = []
+    labels = []
+    for statement in LIST_OF_STATEMENTS:
+        for m in means_compl:
+            if m.statem == statement and m.id == video_ids[0]:
+                tmp.append(m.mean)
+                labels.append(m.id)
+
+
+    # Ind1
+    values=tmp
+    values += values[:1]
+    ax.plot(angles, values, 'g', linewidth=1, linestyle='dashed', label=video_ids[0], marker='o', markersize=3)
+    ax.fill(angles, values, 'g', alpha=0.05)
+    
+
+    tmp = []
+    labels = []
+    for statement in LIST_OF_STATEMENTS:
+        for m in means_compl:
+            if m.statem == statement and m.id == video_ids[1]:
+                tmp.append(m.mean)
+                labels.append(m.id)
+
+    # Ind2
+    values=tmp
+    values += values[:1]
+    ax.plot(angles, values, 'b', linewidth=1, linestyle='dashdot', label=video_ids[1], marker='o', markersize=3)
+    ax.fill(angles, values, 'b', alpha=0.05)
+    
+    # Add legend
+    plt.legend(loc='upper right', bbox_to_anchor=(1.2, 1.1))
+    plt.show()
+
 
 
 
@@ -276,7 +351,12 @@ if SHOW_PLOT3:
     plot3()
 
 
-
+#
+# plot
+# radar
+# - complementary values; without error bars
+if SHOW_PLOT4:
+    plot4(LIST_OF_VIDEO_PAIRS[4])
 
 
 
